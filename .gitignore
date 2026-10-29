@@ -27,3 +27,7 @@ pkg/
 release/wi-kubernetes-manifests.yaml
 vendor/
 gha-creds-*.json
+
+# Terraform local - Fase II
+terraform_local/.terraform/
+terraform_local/online-boutique-config
