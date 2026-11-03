@@ -1,18 +1,23 @@
 name: Fase II - CD Kubernetes Helm
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Fase II - CI Docker
+    types:
+      - completed
   workflow_dispatch:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Verify Kubernetes cluster
         shell: powershell
@@ -24,10 +29,20 @@ jobs:
         run: |
           & "$env:USERPROFILE\Downloads\helm-v3.22.1\windows-amd64\helm.exe" version
 
+      - name: Select image tag
+        shell: powershell
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_run") {
+            "IMAGE_TAG=${{ github.event.workflow_run.head_sha }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          else {
+            "IMAGE_TAG=main" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+
       - name: Deploy Online Boutique with Helm
         shell: powershell
         run: |
-          & "$env:USERPROFILE\Downloads\helm-v3.22.1\windows-amd64\helm.exe" upgrade --install online-boutique .\helm-chart --namespace default --wait --timeout 10m
+          & "$env:USERPROFILE\Downloads\helm-v3.22.1\windows-amd64\helm.exe" upgrade --install online-boutique .\helm-chart --namespace default --set images.tag=$env:IMAGE_TAG --wait --timeout 10m
 
       - name: Verify deployment
         shell: powershell
