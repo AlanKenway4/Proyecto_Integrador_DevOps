@@ -1,0 +1,36 @@
+name: Fase II - CD Kubernetes Helm
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Kubernetes cluster
+        shell: powershell
+        run: |
+          kubectl get nodes
+
+      - name: Verify Helm
+        shell: powershell
+        run: |
+          & "$env:USERPROFILE\Downloads\helm-v3.22.1\windows-amd64\helm.exe" version
+
+      - name: Deploy Online Boutique with Helm
+        shell: powershell
+        run: |
+          & "$env:USERPROFILE\Downloads\helm-v3.22.1\windows-amd64\helm.exe" upgrade --install online-boutique .\helm-chart --namespace default --wait --timeout 10m
+
+      - name: Verify deployment
+        shell: powershell
+        run: |
+          kubectl get pods
+          kubectl get svc
