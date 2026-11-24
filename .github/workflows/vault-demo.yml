@@ -9,27 +9,23 @@ jobs:
 
     steps:
       - name: Leer credenciales de Docker Hub desde Vault
-        id: vault-secrets
-        uses: hashicorp/vault-action@v4
+        uses: hashicorp/vault-action@v2
         with:
           url: ${{ vars.VAULT_ADDR }}
           token: ${{ secrets.VAULT_TOKEN }}
+          exportEnv: true
           secrets: |
             secret/data/online-boutique/dockerhub username | DOCKERHUB_USERNAME ;
             secret/data/online-boutique/dockerhub token | DOCKERHUB_TOKEN ;
 
       - name: Comprobar que Vault entrego las credenciales
         shell: bash
-        env:
-          DOCKERHUB_USERNAME: ${{ steps.vault-secrets.outputs.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ steps.vault-secrets.outputs.DOCKERHUB_TOKEN }}
         run: |
-          test -n "$DOCKERHUB_USERNAME"
-          test -n "$DOCKERHUB_TOKEN"
-          echo "Credenciales recibidas correctamente desde Vault"
+          echo "Usuario de Docker Hub: $DOCKERHUB_USERNAME"
+          echo "El token mide ${#DOCKERHUB_TOKEN} caracteres"
 
       - name: Login real a Docker Hub
         uses: docker/login-action@v4
         with:
-          username: ${{ steps.vault-secrets.outputs.DOCKERHUB_USERNAME }}
-          password: ${{ steps.vault-secrets.outputs.DOCKERHUB_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
