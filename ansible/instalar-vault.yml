@@ -1,0 +1,52 @@
+---
+- name: Instalar y configurar HashiCorp Vault
+  hosts: vault
+  become: true
+
+  tasks:
+    - name: Descargar llave GPG de HashiCorp
+      ansible.builtin.get_url:
+        url: https://apt.releases.hashicorp.com/gpg
+        dest: /usr/share/keyrings/hashicorp-archive-keyring.asc
+        mode: "0644"
+
+    - name: Agregar repositorio oficial de HashiCorp
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.asc] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+        state: present
+        filename: hashicorp
+
+    - name: Instalar Vault
+      ansible.builtin.apt:
+        name: vault
+        state: present
+        update_cache: true
+
+    - name: Crear directorio de datos de Vault
+      ansible.builtin.file:
+        path: "{{ vault_data_dir }}"
+        state: directory
+        owner: vault
+        group: vault
+        mode: "0750"
+
+    - name: Generar configuracion de Vault
+      ansible.builtin.template:
+        src: templates/vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+        owner: vault
+        group: vault
+        mode: "0640"
+      notify: Reiniciar Vault
+
+    - name: Asegurar que Vault este iniciado
+      ansible.builtin.systemd:
+        name: vault
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Reiniciar Vault
+      ansible.builtin.systemd:
+        name: vault
+        state: restarted

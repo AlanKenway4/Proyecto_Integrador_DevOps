@@ -5,7 +5,6 @@
 .kubernetes-manifests-*/
 .project
 .skaffold-*.yaml
-.terraform.lock.hcl
 .terraform/*
 .venv/
 .vs/
@@ -24,10 +23,19 @@ Dockerfile.pip
 node_modules/
 obj/
 pkg/
-release/wi-kubernetes-manifests.yaml
+release/wi-kubernetes_manifests.yaml
 vendor/
 gha-creds-*.json
 
 # Terraform local - Fase II
 terraform_local/.terraform/
+terraform_local/.terraform.lock.hcl
 terraform_local/online-boutique-config
+
+# Fase III - Terraform / Vault
+**/.terraform/
+vault-llaves.txt
+.aws/
+fase3-vault
+fase3-vault.pub
+*.pem
