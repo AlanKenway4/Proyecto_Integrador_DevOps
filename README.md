@@ -1,169 +1,700 @@
-<!-- <p align="center">
-<img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="300" alt="Online Boutique" />
-</p> -->
-![Continuous Integration](https://github.com/GoogleCloudPlatform/microservices-demo/workflows/Continuous%20Integration%20-%20Main/Release/badge.svg)
+# Online Boutique - Proyecto Integrador DevOps
 
-**Online Boutique** is a cloud-first microservices demo application.  The application is a
-web-based e-commerce app where users can browse items, add them to the cart, and purchase them.
+Implementación de prácticas DevOps sobre la aplicación **Online Boutique**, integrando infraestructura como código, integración y despliegue continuo, Kubernetes, Helm, Ansible y Vault para automatizar el despliegue y mejorar la administración de configuración y secretos.
 
-Google uses this application to demonstrate how developers can modernize enterprise applications using Google Cloud products, including: [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine), [Cloud Service Mesh (CSM)](https://cloud.google.com/service-mesh), [gRPC](https://grpc.io/), [Cloud Operations](https://cloud.google.com/products/operations), [Spanner](https://cloud.google.com/spanner), [Memorystore](https://cloud.google.com/memorystore), [AlloyDB](https://cloud.google.com/alloydb), and [Gemini](https://ai.google.dev/). This application works on any Kubernetes cluster.
+---
 
-If you’re using this demo, please **★Star** this repository to show your interest!
+## El problema
 
-**Note to Googlers:** Please fill out the form at [go/microservices-demo](http://go/microservices-demo).
+Online Boutique es una aplicación basada en microservicios que requiere diferentes procesos para construir imágenes, publicar contenedores, desplegar servicios y administrar información sensible.
 
-## Architecture
+Realizar estos procesos manualmente incrementa el riesgo de errores, configuraciones inconsistentes y exposición de credenciales. Además, cada actualización de la aplicación puede requerir repetir diferentes tareas de construcción y despliegue.
 
-**Online Boutique** is composed of 11 microservices written in different
-languages that talk to each other over gRPC.
+El objetivo del proyecto fue aplicar una metodología DevOps para automatizar estos procesos y crear un flujo de trabajo más reproducible, organizado y seguro.
 
-[![Architecture of
-microservices](/docs/img/architecture-diagram.png)](/docs/img/architecture-diagram.png)
+---
 
-Find **Protocol Buffers Descriptions** at the [`./protos` directory](/protos).
+## La propuesta
 
-| Service                                              | Language      | Description                                                                                                                       |
-| ---------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [frontend](/src/frontend)                           | Go            | Exposes an HTTP server to serve the website. Does not require signup/login and generates session IDs for all users automatically. |
-| [cartservice](/src/cartservice)                     | C#            | Stores the items in the user's shopping cart in Redis and retrieves it.                                                           |
-| [productcatalogservice](/src/productcatalogservice) | Go            | Provides the list of products from a JSON file and ability to search products and get individual products.                        |
-| [currencyservice](/src/currencyservice)             | Node.js       | Converts one money amount to another currency. Uses real values fetched from European Central Bank. It's the highest QPS service. |
-| [paymentservice](/src/paymentservice)               | Node.js       | Charges the given credit card info (mock) with the given amount and returns a transaction ID.                                     |
-| [shippingservice](/src/shippingservice)             | Go            | Gives shipping cost estimates based on the shopping cart. Ships items to the given address (mock)                                 |
-| [emailservice](/src/emailservice)                   | Python        | Sends users an order confirmation email (mock).                                                                                   |
-| [checkoutservice](/src/checkoutservice)             | Go            | Retrieves user cart, prepares order and orchestrates the payment, shipping and the email notification.                            |
-| [recommendationservice](/src/recommendationservice) | Python        | Recommends other products based on what's given in the cart.                                                                      |
-| [adservice](/src/adservice)                         | Java          | Provides text ads based on given context words.                                                                                   |
-| [loadgenerator](/src/loadgenerator)                 | Python/Locust | Continuously sends requests imitating realistic user shopping flows to the frontend.                                              |
+Durante la Fase I se propuso implementar un flujo DevOps para automatizar la infraestructura, construcción, publicación y despliegue de los microservicios de Online Boutique.
 
-## Screenshots
+La solución utiliza:
 
-| Home Page                                                                                                         | Checkout Screen                                                                                                    |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [![Screenshot of store homepage](/docs/img/online-boutique-frontend-1.png)](/docs/img/online-boutique-frontend-1.png) | [![Screenshot of checkout screen](/docs/img/online-boutique-frontend-2.png)](/docs/img/online-boutique-frontend-2.png) |
+- **Terraform** para administrar infraestructura como código.
+- **Docker** para construir las imágenes de los microservicios.
+- **Docker Hub** para almacenar las imágenes.
+- **GitHub Actions** para automatizar procesos de CI/CD.
+- **Kubernetes** para ejecutar la aplicación.
+- **Helm** para administrar el despliegue.
+- **Ansible** para automatizar la configuración del servidor Vault.
+- **HashiCorp Vault** para administrar secretos.
+- **AWS EC2** para ejecutar Vault fuera del clúster.
+- **Git y GitHub** para control de versiones.
+- **Trello** para planeación y seguimiento del proyecto.
 
-## Quickstart (GKE)
+La propuesta busca reducir tareas manuales, mejorar la seguridad de las credenciales y mantener un proceso de despliegue consistente.
 
-1. Ensure you have the following requirements:
-   - [Google Cloud project](https://cloud.google.com/resource-manager/docs/creating-managing-projects#creating_a_project).
-   - Shell environment with `gcloud`, `git`, and `kubectl`.
+---
 
-2. Clone the latest major version.
+## Arquitectura
 
-   ```sh
-   git clone --depth 1 --branch v0 https://github.com/GoogleCloudPlatform/microservices-demo.git
-   cd microservices-demo/
-   ```
+```mermaid
+flowchart LR
+    DEV[Desarrollador] -->|git push| GH[GitHub]
+    GH --> GA[GitHub Actions]
 
-   The `--depth 1` argument skips downloading git history.
+    GA -->|Solicita secretos| VAULT[Vault en AWS EC2]
+    VAULT -->|Credenciales Docker Hub| GA
 
-3. Set the Google Cloud project and region and ensure the Google Kubernetes Engine API is enabled.
+    GA -->|Construye y publica imágenes| DH[Docker Hub]
 
-   ```sh
-   export PROJECT_ID=<PROJECT_ID>
-   export REGION=us-central1
-   gcloud services enable container.googleapis.com \
-     --project=${PROJECT_ID}
-   ```
+    GA --> RUNNER[Runner self-hosted]
+    RUNNER -->|Helm upgrade| K8S[Kubernetes / Kind]
 
-   Substitute `<PROJECT_ID>` with the ID of your Google Cloud project.
+    DH -->|Descarga imágenes| K8S
 
-4. Create a GKE cluster and get the credentials for it.
+    K8S --> APP[Online Boutique]
+```
 
-   ```sh
-   gcloud container clusters create-auto online-boutique \
-     --project=${PROJECT_ID} --region=${REGION}
-   ```
+Vault se ejecuta fuera del clúster de Kubernetes en una instancia EC2 de AWS. Su función es almacenar las credenciales utilizadas por el pipeline y limitar su acceso mediante políticas.
 
-   Creating the cluster may take a few minutes.
+El despliegue de la aplicación se realiza mediante Helm sobre un clúster Kubernetes local.
 
-5. Deploy Online Boutique to the cluster.
+---
 
-   ```sh
-   kubectl apply -f ./release/kubernetes-manifests.yaml
-   ```
+## Tecnologías usadas
 
-6. Wait for the pods to be ready.
+- Git
+- GitHub
+- GitHub Actions
+- Docker
+- Docker Hub
+- Kubernetes
+- Kind
+- kubectl
+- Helm
+- Terraform
+- AWS EC2
+- Ansible
+- HashiCorp Vault
+- WSL / Ubuntu
+- Trello
 
-   ```sh
-   kubectl get pods
-   ```
+---
 
-   After a few minutes, you should see the Pods in a `Running` state:
+# Cómo funciona
 
-   ```
-   NAME                                     READY   STATUS    RESTARTS   AGE
-   adservice-76bdd69666-ckc5j               1/1     Running   0          2m58s
-   cartservice-66d497c6b7-dp5jr             1/1     Running   0          2m59s
-   checkoutservice-666c784bd6-4jd22         1/1     Running   0          3m1s
-   currencyservice-5d5d496984-4jmd7         1/1     Running   0          2m59s
-   emailservice-667457d9d6-75jcq            1/1     Running   0          3m2s
-   frontend-6b8d69b9fb-wjqdg                1/1     Running   0          3m1s
-   loadgenerator-665b5cd444-gwqdq           1/1     Running   0          3m
-   paymentservice-68596d6dd6-bf6bv          1/1     Running   0          3m
-   productcatalogservice-557d474574-888kr   1/1     Running   0          3m
-   recommendationservice-69c56b74d4-7z8r5   1/1     Running   0          3m1s
-   redis-cart-5f59546cdd-5jnqf              1/1     Running   0          2m58s
-   shippingservice-6ccc89f8fd-v686r         1/1     Running   0          2m58s
-   ```
+## Infraestructura con Terraform
 
-7. Access the web frontend in a browser using the frontend's external IP.
+Terraform se utiliza para administrar infraestructura mediante código.
 
-   ```sh
-   kubectl get service frontend-external | awk '{print $4}'
-   ```
+Durante la Fase III se utilizó Terraform para crear la infraestructura necesaria para ejecutar Vault en AWS.
 
-   Visit `http://EXTERNAL_IP` in a web browser to access your instance of Online Boutique.
+Los recursos principales incluyen:
 
-8. Congrats! You've deployed the default Online Boutique. To deploy a different variation of Online Boutique (e.g., with Google Cloud Operations tracing, Istio, etc.), see [Deploy Online Boutique variations with Kustomize](#deploy-online-boutique-variations-with-kustomize).
+- Instancia EC2.
+- Security Group.
+- Regla de acceso SSH.
+- Regla de acceso al puerto `8200`.
+- Key Pair para la conexión SSH.
+- Disco para almacenamiento de Vault.
 
-9. Once you are done with it, delete the GKE cluster.
+Para inicializar Terraform:
 
-   ```sh
-   gcloud container clusters delete online-boutique \
-     --project=${PROJECT_ID} --region=${REGION}
-   ```
+```bash
+cd terraform_fase3
 
-   Deleting the cluster may take a few minutes.
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
 
-## Additional deployment options
+Los datos de la instancia se pueden consultar con:
 
-- **Terraform**: [See these instructions](/terraform) to learn how to deploy Online Boutique using [Terraform](https://www.terraform.io/intro).
-- **Istio / Cloud Service Mesh**: [See these instructions](/kustomize/components/service-mesh-istio/README.md) to deploy Online Boutique alongside an Istio-backed service mesh.
-- **Non-GKE clusters (Minikube, Kind, etc)**: See the [Development guide](/docs/development-guide.md) to learn how you can deploy Online Boutique on non-GKE clusters.
-- **AI assistant using Gemini**: [See these instructions](/kustomize/components/shopping-assistant/README.md) to deploy a Gemini-powered AI assistant that suggests products to purchase based on an image.
-- **And more**: The [`/kustomize` directory](/kustomize) contains instructions for customizing the deployment of Online Boutique with other variations.
+```bash
+terraform output
+```
 
-## Documentation
+Debido a que AWS Academy utiliza laboratorios temporales, la IP pública de la instancia puede cambiar después de apagar y volver a iniciar el laboratorio.
 
-- [Development](/docs/development-guide.md) to learn how to run and develop this app locally.
+Para actualizar el estado de Terraform se utiliza:
 
-## Demos featuring Online Boutique
+```bash
+terraform apply -refresh-only
+```
 
-- [Security hardening of the OnlineBoutique sample apps with the Docker Hardened Images (DHI)](https://medium.com/google-cloud/security-hardening-of-the-onlineboutique-sample-apps-with-docker-hardened-images-dhi-ca1fad348343)
-- [alpine, distroless or scratch?](https://medium.com/google-cloud/alpine-distroless-or-scratch-caac35250e0b)
-- [Platform Engineering in action: Deploy the Online Boutique sample apps with Score and Humanitec](https://medium.com/p/d99101001e69)
-- [The new Kubernetes Gateway API with Istio and Anthos Service Mesh (ASM)](https://medium.com/p/9d64c7009cd)
-- [Use Azure Redis Cache with the Online Boutique sample on AKS](https://medium.com/p/981bd98b53f8)
-- [Sail Sharp, 8 tips to optimize and secure your .NET containers for Kubernetes](https://medium.com/p/c68ba253844a)
-- [Deploy multi-region application with Anthos and Google cloud Spanner](https://medium.com/google-cloud/a2ea3493ed0)
-- [Use Google Cloud Memorystore (Redis) with the Online Boutique sample on GKE](https://medium.com/p/82f7879a900d)
-- [Use Helm to simplify the deployment of Online Boutique, with a Service Mesh, GitOps, and more!](https://medium.com/p/246119e46d53)
-- [How to reduce microservices complexity with Apigee and Anthos Service Mesh](https://cloud.google.com/blog/products/application-modernization/api-management-and-service-mesh-go-together)
-- [gRPC health probes with Kubernetes 1.24+](https://medium.com/p/b5bd26253a4c)
-- [Use Google Cloud Spanner with the Online Boutique sample](https://medium.com/p/f7248e077339)
-- [Seamlessly encrypt traffic from any apps in your Mesh to Memorystore (redis)](https://medium.com/google-cloud/64b71969318d)
-- [Strengthen your app's security with Cloud Service Mesh and Anthos Config Management](https://cloud.google.com/service-mesh/docs/strengthen-app-security)
-- [From edge to mesh: Exposing service mesh applications through GKE Ingress](https://cloud.google.com/architecture/exposing-service-mesh-apps-through-gke-ingress)
-- [Take the first step toward SRE with Cloud Operations Sandbox](https://cloud.google.com/blog/products/operations/on-the-road-to-sre-with-cloud-operations-sandbox)
-- [Deploying the Online Boutique sample application on Cloud Service Mesh](https://cloud.google.com/service-mesh/docs/onlineboutique-install-kpt)
-- [Anthos Service Mesh Workshop: Lab Guide](https://codelabs.developers.google.com/codelabs/anthos-service-mesh-workshop)
-- [KubeCon EU 2019 - Reinventing Networking: A Deep Dive into Istio's Multicluster Gateways - Steve Dake, Independent](https://youtu.be/-t2BfT59zJA?t=982)
-- Google Cloud Next'18 SF
-  - [Day 1 Keynote](https://youtu.be/vJ9OaAqfxo4?t=2416) showing GKE On-Prem
-  - [Day 3 Keynote](https://youtu.be/JQPOPV_VH5w?t=815) showing Stackdriver
-    APM (Tracing, Code Search, Profiler, Google Cloud Build)
-  - [Introduction to Service Management with Istio](https://www.youtube.com/watch?v=wCJrdKdD6UM&feature=youtu.be&t=586)
-- [Google Cloud Next'18 London – Keynote](https://youtu.be/nIq2pkNcfEI?t=3071)
-  showing Stackdriver Incident Response Management
-- [Microservices demo showcasing Go Micro](https://github.com/go-micro/demo)
+Después:
+
+```bash
+terraform output
+```
+
+permite consultar nuevamente la dirección actual del servidor Vault.
+
+---
+
+## Pipeline CI/CD con GitHub Actions y Helm
+
+GitHub Actions se utiliza para automatizar procesos relacionados con integración y despliegue continuo.
+
+El flujo utilizado en el proyecto es:
+
+```text
+Cambio en código
+      ↓
+Git Push
+      ↓
+GitHub Actions
+      ↓
+Vault
+      ↓
+Credenciales de Docker Hub
+      ↓
+Construcción de imágenes
+      ↓
+Docker Hub
+      ↓
+Runner self-hosted
+      ↓
+Helm
+      ↓
+Kubernetes
+      ↓
+Online Boutique
+```
+
+Online Boutique utiliza diferentes microservicios que deben ser construidos y desplegados de manera coordinada.
+
+El pipeline de integración continua se encarga de automatizar la construcción de las imágenes.
+
+Posteriormente, Helm se utiliza para aplicar la configuración de la aplicación sobre Kubernetes.
+
+Ejemplo:
+
+```bash
+helm upgrade --install online-boutique ./helm-chart
+```
+
+El estado de los pods puede verificarse con:
+
+```bash
+kubectl get pods
+```
+
+Y los servicios con:
+
+```bash
+kubectl get services
+```
+
+---
+
+## Configuración con Ansible
+
+Ansible se utilizó para automatizar la instalación y configuración del servidor Vault.
+
+La estructura principal utilizada fue:
+
+```text
+ansible/
+├── group_vars/
+│   └── vault.yml
+├── politicas/
+│   ├── admin.hcl
+│   └── ci-readonly.hcl
+├── templates/
+│   └── vault.hcl.j2
+├── instalar-vault.yml
+└── inventario-aws.ini
+```
+
+El playbook se ejecuta con:
+
+```bash
+ansible-playbook -i ansible/inventario-aws.ini ansible/instalar-vault.yml
+```
+
+La primera ejecución realiza los cambios necesarios para instalar y configurar Vault.
+
+Posteriormente se ejecutó nuevamente el mismo playbook para comprobar la **idempotencia**.
+
+La segunda ejecución obtuvo:
+
+```text
+changed=0
+```
+
+Esto demuestra que Ansible detecta que la configuración ya se encuentra aplicada y evita realizar cambios innecesarios.
+
+---
+
+## Configuración y secretos con Vault
+
+Vault se ejecuta fuera del clúster Kubernetes en una instancia EC2.
+
+El servidor utiliza almacenamiento en disco y tiene habilitada su interfaz web.
+
+Después de iniciar Vault se configuraron:
+
+- 3 llaves de desellado.
+- Umbral de 2 llaves.
+- Motor de secretos KV v2.
+- Política de acceso para CI/CD.
+- Token específico para el pipeline.
+- Tiempo de vida limitado para el token.
+
+Después de reiniciar la instancia EC2, Vault vuelve a quedar sellado.
+
+Primero se configura la dirección:
+
+```bash
+export VAULT_ADDR=http://IP_PUBLICA_EC2:8200
+```
+
+Después se comprueba su estado:
+
+```bash
+vault status
+```
+
+Si aparece:
+
+```text
+Sealed true
+```
+
+es necesario desellarlo:
+
+```bash
+vault operator unseal
+```
+
+Después de utilizar dos llaves válidas:
+
+```text
+Initialized    true
+Sealed         false
+Storage Type   file
+```
+
+---
+
+## KV Secret Engine
+
+Se configuró un motor de secretos KV versión 2:
+
+```bash
+vault secrets enable -path=secret kv-v2
+```
+
+Las credenciales utilizadas para Docker Hub se almacenan en la ruta:
+
+```text
+secret/online-boutique/dockerhub
+```
+
+Esto permite que las credenciales no tengan que almacenarse directamente dentro de los archivos del proyecto.
+
+---
+
+## Política de mínimo privilegio
+
+Se creó una política específica para el pipeline:
+
+```hcl
+path "secret/data/online-boutique/*" {
+  capabilities = ["read"]
+}
+```
+
+Esta política permite únicamente operaciones de lectura sobre los secretos necesarios para Online Boutique.
+
+El token utilizado por GitHub Actions no tiene permisos administrativos.
+
+Para comprobarlo se realizaron intentos de escritura y acceso a rutas no autorizadas.
+
+Vault respondió:
+
+```text
+403 permission denied
+```
+
+Esto demuestra la aplicación del principio de **mínimo privilegio**.
+
+---
+
+## Integración de Vault con GitHub Actions
+
+GitHub Actions utiliza Vault para solicitar las credenciales necesarias para Docker Hub.
+
+El flujo utiliza `hashicorp/vault-action`.
+
+Ejemplo:
+
+```yaml
+- name: Leer credenciales de Docker Hub desde Vault
+  uses: hashicorp/vault-action@v3
+  with:
+    url: ${{ vars.VAULT_ADDR }}
+    token: ${{ secrets.VAULT_TOKEN }}
+    secrets: |
+      secret/data/online-boutique/dockerhub username | DOCKERHUB_USERNAME ;
+      secret/data/online-boutique/dockerhub token | DOCKERHUB_TOKEN
+```
+
+La dirección del servidor se configura en GitHub como variable:
+
+```text
+VAULT_ADDR
+```
+
+El token utilizado por el pipeline se almacena como secreto:
+
+```text
+VAULT_TOKEN
+```
+
+Con esto se evita escribir directamente las credenciales reales dentro del workflow.
+
+---
+
+# Cómo levantar el proyecto
+
+## 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/AlanKenway4/Proyecto_Integrador_DevOps.git
+```
+
+Entrar al proyecto:
+
+```bash
+cd Proyecto_Integrador_DevOps
+```
+
+---
+
+## 2. Verificar Kubernetes
+
+```bash
+kubectl cluster-info
+kubectl get nodes
+```
+
+---
+
+## 3. Crear o actualizar la infraestructura de Vault
+
+```bash
+cd terraform_fase3
+terraform init
+terraform apply
+```
+
+Consultar la IP:
+
+```bash
+terraform output
+```
+
+Si la instancia ya existe pero cambió su IP:
+
+```bash
+terraform apply -refresh-only
+terraform output
+```
+
+---
+
+## 4. Configurar Vault con Ansible
+
+Desde la raíz del proyecto:
+
+```bash
+ansible-playbook -i ansible/inventario-aws.ini ansible/instalar-vault.yml
+```
+
+Para comprobar idempotencia se puede ejecutar nuevamente el mismo comando.
+
+El resultado esperado es:
+
+```text
+changed=0
+```
+
+---
+
+## 5. Configurar la dirección de Vault
+
+```bash
+export VAULT_ADDR=http://IP_PUBLICA_EC2:8200
+```
+
+---
+
+## 6. Comprobar Vault
+
+```bash
+vault status
+```
+
+Si está sellado:
+
+```bash
+vault operator unseal
+```
+
+Se deben proporcionar al menos dos llaves válidas.
+
+Después:
+
+```bash
+vault status
+```
+
+Debe indicar:
+
+```text
+Initialized    true
+Sealed         false
+```
+
+---
+
+## 7. Configurar GitHub
+
+En el repositorio:
+
+```text
+Settings
+→ Secrets and variables
+→ Actions
+```
+
+Configurar la variable:
+
+```text
+VAULT_ADDR
+```
+
+con la dirección actual del servidor Vault.
+
+También debe existir el secreto:
+
+```text
+VAULT_TOKEN
+```
+
+---
+
+## 8. Ejecutar GitHub Actions
+
+Desde GitHub:
+
+```text
+Actions
+→ Fase III - Vault Demo
+→ Run workflow
+```
+
+El workflow se comunica con Vault para solicitar las credenciales configuradas.
+
+---
+
+## 9. Desplegar con Helm
+
+Ejecutar:
+
+```bash
+helm upgrade --install online-boutique ./helm-chart
+```
+
+Comprobar los pods:
+
+```bash
+kubectl get pods
+```
+
+Comprobar los servicios:
+
+```bash
+kubectl get services
+```
+
+Finalmente se accede al frontend de Online Boutique desde el navegador.
+
+---
+
+# Resultados
+
+Durante el desarrollo del proyecto se obtuvieron los siguientes resultados:
+
+- Uso de Terraform para administrar infraestructura.
+- Implementación de Kubernetes para ejecutar Online Boutique.
+- Automatización de procesos mediante GitHub Actions.
+- Uso de Helm para administrar el despliegue.
+- Configuración automatizada de Vault mediante Ansible.
+- Evidencia de idempotencia de Ansible con `changed=0`.
+- Vault ejecutándose fuera del clúster Kubernetes.
+- Vault instalado sobre AWS EC2.
+- Vault inicializado y desellado.
+- Almacenamiento en disco configurado.
+- Interfaz web de Vault habilitada.
+- Motor KV v2 habilitado.
+- Credenciales de Docker Hub almacenadas en Vault.
+- Política de solo lectura para CI/CD.
+- Token independiente para el pipeline.
+- Comprobación del principio de mínimo privilegio mediante errores `403`.
+- Comunicación entre GitHub Actions y Vault.
+- Despliegue de Online Boutique mediante Kubernetes y Helm.
+
+---
+
+# Retos y lecciones aprendidas
+
+## Credenciales temporales de AWS
+
+AWS Academy utiliza credenciales temporales.
+
+Cuando estas credenciales expiran, Terraform y AWS CLI dejan de poder comunicarse con AWS.
+
+La solución consiste en obtener nuevas credenciales del laboratorio y actualizar:
+
+```text
+~/.aws/credentials
+```
+
+---
+
+## Cambio de IP pública de EC2
+
+Después de apagar y volver a iniciar el laboratorio, la instancia EC2 puede recibir una nueva IP pública.
+
+Terraform puede conservar temporalmente la dirección anterior en su estado.
+
+Para actualizarla se utiliza:
+
+```bash
+terraform apply -refresh-only
+```
+
+Después:
+
+```bash
+terraform output
+```
+
+permite consultar la nueva dirección.
+
+También es necesario actualizar la variable:
+
+```text
+VAULT_ADDR
+```
+
+en GitHub.
+
+---
+
+## Vault sellado después de reiniciar EC2
+
+Después de reiniciar la instancia, Vault vuelve a:
+
+```text
+Sealed true
+```
+
+Para recuperar el servicio fue necesario utilizar dos de las tres llaves de desellado.
+
+Después:
+
+```text
+Sealed false
+```
+
+---
+
+## Error de configuración inicial de Vault
+
+Durante una de las primeras ejecuciones se generó un valor booleano incorrecto dentro de la configuración de Vault.
+
+Esto provocó que el servicio no pudiera iniciar correctamente.
+
+Después de corregir el template de Ansible, Vault pudo ejecutarse correctamente.
+
+---
+
+## Idempotencia de Ansible
+
+La primera ejecución del playbook realizó los cambios necesarios.
+
+Posteriormente se ejecutó nuevamente.
+
+El resultado:
+
+```text
+changed=0
+```
+
+demostró que Ansible no realiza modificaciones innecesarias cuando el servidor ya está configurado.
+
+---
+
+## Permisos del token de Vault
+
+Fue necesario comprobar que el token utilizado por GitHub Actions no tuviera permisos administrativos.
+
+Al intentar escribir secretos o acceder a rutas no autorizadas, Vault devolvió:
+
+```text
+403 permission denied
+```
+
+Esto permitió comprobar que la política de mínimo privilegio estaba funcionando.
+
+---
+
+## LoadBalancer en Kubernetes local
+
+Durante la Fase II algunos recursos permanecían pendientes porque la configuración utilizaba un servicio `LoadBalancer`.
+
+En un clúster Kubernetes local este comportamiento provocaba problemas con el frontend.
+
+Se modificó la configuración de Helm para utilizar una opción compatible con el entorno local y permitir que los pods pudieran ejecutarse correctamente.
+
+---
+
+## Integración de Vault con GitHub Actions
+
+Durante las pruebas se confirmó que GitHub Actions podía comunicarse con Vault y solicitar las credenciales almacenadas.
+
+También se detectó un problema posterior en el paso de autenticación con Docker Hub relacionado con la forma en que el token obtenido desde Vault era entregado al paso de login.
+
+Este problema permitió identificar la importancia del correcto mapeo de variables y secretos entre acciones dentro de un workflow.
+
+---
+
+# Conclusión
+
+El proyecto permitió integrar diferentes herramientas utilizadas dentro de un ciclo DevOps.
+
+Terraform permitió administrar infraestructura mediante código. GitHub Actions permitió automatizar procesos de integración y despliegue. Kubernetes y Helm permitieron administrar los microservicios de Online Boutique. Ansible permitió automatizar la configuración del servidor y Vault permitió separar las credenciales sensibles del código fuente.
+
+También se comprobó la importancia de la idempotencia, el principio de mínimo privilegio, la administración correcta de secretos y la automatización de tareas repetitivas.
+
+Como mejoras futuras se podrían implementar:
+
+- TLS para Vault.
+- Auto Unseal.
+- AppRole u OIDC en lugar de tokens estáticos.
+- Kubernetes administrado en la nube.
+- Monitoreo y observabilidad del sistema.
+
+---
+
+## Autor
+
+**Ángel Alain Velez Bello**
+
+Proyecto Integrador de la Metodología DevOps
